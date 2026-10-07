@@ -1,11 +1,16 @@
 package com.algaworks.algadelivery.delivery.tracking.domain.model;
 
+import com.algaworks.algadelivery.delivery.tracking.domain.event.DeliveryFulfilledEvent;
+import com.algaworks.algadelivery.delivery.tracking.domain.event.DeliveryPickUpEvent;
+import com.algaworks.algadelivery.delivery.tracking.domain.event.DeliveryPlacedEvent;
 import com.algaworks.algadelivery.delivery.tracking.domain.exception.DomainException;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,10 +21,10 @@ import java.util.UUID;
 //Esta @EqualsAndHashCode anotacao utiliza propriedade indicado como indice unico
 @Entity
 @NoArgsConstructor(access = AccessLevel.PACKAGE)
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @Setter(AccessLevel.PRIVATE)
 @Getter
-public class Delivery {
+public class Delivery extends AbstractAggregateRoot<Delivery> {
 
     @Id
     @EqualsAndHashCode.Include
@@ -28,10 +33,10 @@ public class Delivery {
 
     private DeliveryStatus status;
 
-    private OffsetTime placeAt;
-    private OffsetTime assignedAt;
-    private OffsetTime expectedDeliveryAt;
-    private OffsetTime fulfilledAt;
+    private OffsetDateTime placeAt;
+    private OffsetDateTime assignedAt;
+    private OffsetDateTime expectedDeliveryAt;
+    private OffsetDateTime fulfilledAt;
 
     private BigDecimal distanceFee;
     private BigDecimal courierPayout;
@@ -99,25 +104,28 @@ public class Delivery {
         setDistanceFee(details.getDistanceFee());
         setCourierPayout(details.getCourierPayout());
 
-        setExpectedDeliveryAt(OffsetTime.now().plus(details.getExpectedDeliveryTime()));
+        setExpectedDeliveryAt(OffsetDateTime.now().plus(details.getExpectedDeliveryTime()));
         setTotalCost(this.getDistanceFee().add(this.getCourierPayout()));
     }
 
     public void place(){
         verifyIfCanBePlace();
         this.changeStatusTo(DeliveryStatus.WAITING_FOR_COURIER);
-        this.setPlaceAt(OffsetTime.now());
+        this.setPlaceAt(OffsetDateTime.now());
+        super.registerEvent(new DeliveryPlacedEvent(this.getPlaceAt(), this.getId()));
     }
 
     public void pickUp(UUID courierId){
         this.setCourierId(courierId);
         this.changeStatusTo(DeliveryStatus.IN_TRANSIT);
-        this.setAssignedAt(OffsetTime.now());
+        this.setAssignedAt(OffsetDateTime.now());
+        super.registerEvent(new DeliveryPickUpEvent(this.getAssignedAt(), this.getId()));
     }
 
     public void markAsDelivered(){
         this.changeStatusTo(DeliveryStatus.DELIVERED);
-        this.setFulfilledAt(OffsetTime.now());
+        this.setFulfilledAt(OffsetDateTime.now());
+        super.registerEvent(new DeliveryFulfilledEvent(this.getFulfilledAt(), this.getId()));
     }
 
     public void chageItemQuantity(UUID itemId, int quantity){
